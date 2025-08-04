@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import axios from 'axios';
 
 interface User {
   id: string;
@@ -10,27 +9,14 @@ interface User {
 
 interface LoginProps {
   onLogin: (user: User, token: string) => void;
+  onShowRegister: () => void;
 }
 
-const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  const [isLogin, setIsLogin] = useState(true);
-  const [formData, setFormData] = useState({
-    email: '',
-    name: '',
-    photoUrl: '',
-    password: '',
-    confirmPassword: ''
-  });
+const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
-    setError('');
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,142 +24,68 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setError('');
 
     try {
-      if (!isLogin && formData.password !== formData.confirmPassword) {
-        setError('Passwords do not match');
-        setLoading(false);
-        return;
+      const response = await fetch('http://localhost:5000/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        onLogin(data.user, data.token);
+      } else {
+        setError(data.message || 'Login failed');
       }
-
-      const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
-      const payload = isLogin 
-        ? { email: formData.email, password: formData.password }
-        : { 
-            email: formData.email, 
-            name: formData.name, 
-            photoUrl: formData.photoUrl || undefined,
-            password: formData.password 
-          };
-
-      const response = await axios.post(endpoint, payload);
-      const { token, user } = response.data;
-
-      onLogin(user, token);
-    } catch (error: any) {
-      setError(error.response?.data?.error || 'An error occurred');
+    } catch (err) {
+      setError('Network error. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleForm = () => {
-    setIsLogin(!isLogin);
-    setFormData({
-      email: '',
-      name: '',
-      photoUrl: '',
-      password: '',
-      confirmPassword: ''
-    });
-    setError('');
-  };
-
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <h1>{isLogin ? 'Welcome Back' : 'Join ChatApp'}</h1>
+        <h1>Welcome to ChatApp</h1>
+        <p>Please sign in to continue</p>
         
-        {error && <div className="error-message">{error}</div>}
-        
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="auth-form">
           <div className="form-group">
             <label htmlFor="email">Email</label>
             <input
               type="email"
               id="email"
-              name="email"
-              value={formData.email}
-              onChange={handleInputChange}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               required
+              placeholder="Enter your email"
             />
           </div>
-
-          {!isLogin && (
-            <div className="form-group">
-              <label htmlFor="name">Name</label>
-              <input
-                type="text"
-                id="name"
-                name="name"
-                value={formData.name}
-                onChange={handleInputChange}
-                required
-              />
-            </div>
-          )}
-
-          {!isLogin && (
-            <div className="form-group">
-              <label htmlFor="photoUrl">Photo URL (optional)</label>
-              <input
-                type="url"
-                id="photoUrl"
-                name="photoUrl"
-                value={formData.photoUrl}
-                onChange={handleInputChange}
-                placeholder="https://example.com/photo.jpg"
-              />
-            </div>
-          )}
-
+          
           <div className="form-group">
             <label htmlFor="password">Password</label>
             <input
               type="password"
               id="password"
-              name="password"
-              value={formData.password}
-              onChange={handleInputChange}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               required
+              placeholder="Enter your password"
             />
           </div>
-
-          {!isLogin && (
-            <div className="form-group">
-              <label htmlFor="confirmPassword">Confirm Password</label>
-              <input
-                type="password"
-                id="confirmPassword"
-                name="confirmPassword"
-                value={formData.confirmPassword}
-                onChange={handleInputChange}
-                required
-              />
-            </div>
-          )}
-
-          <button 
-            type="submit" 
-            className="btn" 
-            disabled={loading}
-          >
-            {loading ? (
-              <>
-                <span className="loading-spinner"></span>
-                {isLogin ? 'Signing In...' : 'Creating Account...'}
-              </>
-            ) : (
-              isLogin ? 'Sign In' : 'Create Account'
-            )}
+          
+          {error && <div className="error-message">{error}</div>}
+          
+          <button type="submit" disabled={loading} className="auth-button">
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
-
-        <div className="toggle-form">
-          <button type="button" onClick={toggleForm}>
-            {isLogin 
-              ? "Don't have an account? Sign up" 
-              : "Already have an account? Sign in"
-            }
-          </button>
+        
+        <div className="auth-footer">
+          <p>Don't have an account? <a href="#" onClick={onShowRegister}>Sign up</a></p>
         </div>
       </div>
     </div>

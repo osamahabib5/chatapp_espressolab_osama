@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Login from './components/Login';
+import Register from './components/Register';
 import Chat from './components/Chat';
 import './App.css';
 
@@ -13,6 +14,7 @@ interface User {
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showRegister, setShowRegister] = useState(false);
 
   useEffect(() => {
     // Check for stored authentication token
@@ -39,6 +41,12 @@ function App() {
     localStorage.setItem('user', JSON.stringify(userData));
   };
 
+  const handleRegister = (userData: User, token: string) => {
+    setUser(userData);
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify(userData));
+  };
+
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem('token');
@@ -59,8 +67,10 @@ function App() {
     <div className="App">
       {user ? (
         <Chat user={user} onLogout={handleLogout} />
+      ) : showRegister ? (
+        <Register onRegister={handleRegister} onBackToLogin={() => setShowRegister(false)} />
       ) : (
-        <Login onLogin={handleLogin} />
+        <Login onLogin={handleLogin} onShowRegister={() => setShowRegister(true)} />
       )}
     </div>
   );

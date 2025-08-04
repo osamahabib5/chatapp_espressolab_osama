@@ -1,8 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { io, Socket } from 'socket.io-client';
-import axios from 'axios';
-import Sidebar from './Sidebar';
+import React, { useState, useEffect } from 'react';
 import ChatRoom from './ChatRoom';
+import Sidebar from './Sidebar';
 
 interface User {
   id: string;
@@ -34,173 +32,135 @@ interface ChatProps {
 }
 
 const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
-  const [socket, setSocket] = useState<Socket | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Initialize socket connection
-    const newSocket = io('http://localhost:5000');
-    setSocket(newSocket);
-
-    // Load rooms
-    loadRooms();
-
-    return () => {
-      newSocket.close();
-    };
+    fetchRooms();
   }, []);
 
   useEffect(() => {
-    if (!socket) return;
-
-    // Socket event listeners
-    socket.on('new_message', (message: Message) => {
-      setMessages(prev => [...prev, message]);
-    });
-
-    socket.on('user_joined', ({ user: joinedUser }) => {
-      setOnlineUsers(prev => [...prev, joinedUser]);
-    });
-
-    socket.on('user_left', ({ userId }) => {
-      setOnlineUsers(prev => prev.filter(u => u.id !== userId));
-    });
-
-    socket.on('room_users', (users: User[]) => {
-      setOnlineUsers(users);
-    });
-
-    return () => {
-      socket.off('new_message');
-      socket.off('user_joined');
-      socket.off('user_left');
-      socket.off('room_users');
-    };
-  }, [socket]);
-
-  useEffect(() => {
-    // Scroll to bottom when new messages arrive
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  const loadRooms = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get('/api/rooms', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setRooms(response.data);
-      setLoading(false);
-    } catch (error: any) {
-      setError('Failed to load rooms');
-      setLoading(false);
-    }
-  };
-
-  const createRoom = async (name: string) => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.post('/api/rooms', { name }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setRooms(prev => [response.data, ...prev]);
-      return response.data;
-    } catch (error: any) {
-      setError('Failed to create room');
-      throw error;
-    }
-  };
-
-  const joinRoom = async (room: Room) => {
-    if (!socket) return;
-
-    // Leave current room if any
     if (currentRoom) {
-      socket.emit('leave_room', { roomId: currentRoom.id });
+      fetchMessages(currentRoom.id);
     }
+  }, [currentRoom]);
 
-    // Join new room
-    socket.emit('join_room', { roomId: room.id, user });
-    setCurrentRoom(room);
-
-    // Load room messages
+  const fetchRooms = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`/api/rooms/${room.id}/messages`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const response = await fetch('http://localhost:5000/api/rooms', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
       });
-      setMessages(response.data);
-    } catch (error: any) {
-      setError('Failed to load messages');
+      if (response.ok) {
+        const data = await response.json();
+        setRooms(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch rooms:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const sendMessage = (content: string) => {
-    if (!socket || !currentRoom || !content.trim()) return;
+  const fetchMessages = async (roomId: string) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/rooms/${roomId}/messages`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setMessages(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch messages:', error);
+    }
+  };
 
-    socket.emit('send_message', {
-      roomId: currentRoom.id,
-      content: content.trim(),
-      user
+  const handleCreateRoom = async (name: string): Promise<Room> => {
+    const response = await fetch('http://localhost:5000/api/rooms', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify({ name })
     });
+    
+    if (!response.ok) {
+      throw new Error('Failed to create room');
+    }
+    
+    const newRoom = await response.json();
+    setRooms(prev => [...prev, newRoom]);
+    return newRoom;
+  };
+
+  const handleJoinRoom = (room: Room) => {
+    setCurrentRoom(room);
+  };
+
+  const handleSendMessage = async (content: string) => {
+    if (!currentRoom) return;
+
+    try {
+      const response = await fetch(`http://localhost:5000/api/rooms/${currentRoom.id}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ content })
+      });
+
+      if (response.ok) {
+        const newMessage = await response.json();
+        setMessages(prev => [...prev, newMessage]);
+      }
+    } catch (error) {
+      console.error('Failed to send message:', error);
+    }
   };
 
   const handleTyping = (isTyping: boolean) => {
-    if (!socket || !currentRoom) return;
-    socket.emit('typing', { roomId: currentRoom.id, user, isTyping });
+    // Implement typing indicator logic here
+    console.log('User typing:', isTyping);
   };
 
   if (loading) {
-    return (
-      <div className="container">
-        <div className="auth-card">
-          <h1>Loading...</h1>
-        </div>
-      </div>
-    );
+    return <div>Loading...</div>;
   }
 
   return (
-    <div className="container">
-      <div className="chat-container">
-        <Sidebar
-          rooms={rooms}
-          currentRoom={currentRoom}
-          onCreateRoom={createRoom}
-          onJoinRoom={joinRoom}
-          onLogout={onLogout}
-          user={user}
+    <div className="chat-container">
+      <Sidebar 
+        user={user} 
+        onLogout={onLogout}
+        rooms={rooms}
+        currentRoom={currentRoom}
+        onCreateRoom={handleCreateRoom}
+        onJoinRoom={handleJoinRoom}
+      />
+      {currentRoom ? (
+        <ChatRoom 
+          room={currentRoom}
+          messages={messages}
+          onlineUsers={onlineUsers}
+          onSendMessage={handleSendMessage}
+          onTyping={handleTyping}
+          currentUser={user}
+          messagesEndRef={messagesEndRef}
         />
-        
-        {currentRoom ? (
-          <ChatRoom
-            room={currentRoom}
-            messages={messages}
-            onlineUsers={onlineUsers}
-            onSendMessage={sendMessage}
-            onTyping={handleTyping}
-            currentUser={user}
-            messagesEndRef={messagesEndRef}
-          />
-        ) : (
-          <div className="chat-main">
-            <div className="messages-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <h2 style={{ color: '#666' }}>Select a room to start chatting</h2>
-            </div>
-          </div>
-        )}
-      </div>
-      
-      {error && (
-        <div className="error-message" style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 1000 }}>
-          {error}
+      ) : (
+        <div className="no-room-selected">
+          <h2>Welcome to ChatApp!</h2>
+          <p>Select a room from the sidebar to start chatting.</p>
         </div>
       )}
     </div>
