@@ -36,6 +36,39 @@ function App() {
     }
     
     setLoading(false);
+
+    // Listen for localStorage changes in other tabs
+    const handleStorageChange = (e: StorageEvent) => {
+      // Only handle changes to our specific keys
+      if (e.key === 'token' || e.key === 'user') {
+        const token = localStorage.getItem('token');
+        const userData = localStorage.getItem('user');
+        
+        if (token && userData) {
+          // User logged in from another tab
+          try {
+            const parsedUser = JSON.parse(userData);
+            setUser(parsedUser);
+            console.log('User logged in from another tab');
+          } catch (error) {
+            console.error('Error parsing user data from storage event:', error);
+            setUser(null);
+          }
+        } else {
+          // User logged out from another tab
+          setUser(null);
+          console.log('User logged out from another tab');
+        }
+      }
+    };
+
+    // Add event listener for storage changes
+    window.addEventListener('storage', handleStorageChange);
+
+    // Cleanup event listener on component unmount
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, []);
 
   const handleLogin = (userData: User, token: string) => {
