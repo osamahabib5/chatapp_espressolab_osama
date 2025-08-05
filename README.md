@@ -321,9 +321,6 @@ REACT_APP_GOOGLE_CLIENT_ID=your-google-client-id
 4. Add tests for new functionality
 5. Submit a pull request
 
-## 📄 License
-
-This project is licensed under the MIT License.
 
 ---
 
