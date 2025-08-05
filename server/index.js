@@ -326,6 +326,42 @@ app.get('/api/rooms/:roomId/messages', authenticateToken, (req, res) => {
   });
 });
 
+app.post('/api/rooms/:roomId/messages', authenticateToken, (req, res) => {
+  const { roomId } = req.params;
+  const { content } = req.body;
+  const messageId = uuidv4();
+
+  if (!content) {
+    return res.status(400).json({ error: 'Message content is required' });
+  }
+
+  // Save to database
+  db.run(
+    'INSERT INTO messages (id, roomId, userId, content) VALUES (?, ?, ?, ?)',
+    [messageId, roomId, req.user.userId, content],
+    function(err) {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      
+      // Get user info for the response
+      db.get('SELECT name, photoUrl FROM users WHERE id = ?', [req.user.userId], (err, user) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        
+        const message = {
+          id: messageId,
+          roomId,
+          userId: req.user.userId,
+          content,
+          name: user.name,
+          photoUrl: user.photoUrl,
+          createdAt: new Date().toISOString()
+        };
+        
+        res.json(message);
+      });
+    }
+  );
+});
+
 // Test endpoint to check OAuth configuration
 app.get('/api/auth/test', (req, res) => {
   res.json({

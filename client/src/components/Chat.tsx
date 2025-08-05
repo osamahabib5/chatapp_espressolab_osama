@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { io, Socket } from 'socket.io-client';
 import ChatRoom from './ChatRoom';
 import Sidebar from './Sidebar';
 
@@ -36,18 +37,76 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
     fetchRooms();
+    
+    // Initialize Socket.IO connection
+    socketRef.current = io('http://localhost:5000');
+    
+    // Listen for new messages
+    socketRef.current.on('new_message', (message: Message) => {
+      setMessages(prev => [...prev, message]);
+    });
+    
+    // Listen for user joined
+    socketRef.current.on('user_joined', ({ user: joinedUser }: { user: User }) => {
+      setOnlineUsers(prev => [...prev, joinedUser]);
+    });
+    
+    // Listen for user left
+    socketRef.current.on('user_left', ({ userId }: { userId: string }) => {
+      setOnlineUsers(prev => prev.filter(u => u.id !== userId));
+    });
+    
+    // Listen for room users
+    socketRef.current.on('room_users', (users: User[]) => {
+      setOnlineUsers(users);
+    });
+    
+    // Listen for typing indicators
+    socketRef.current.on('user_typing', ({ user: typingUser, isTyping }: { user: User, isTyping: boolean }) => {
+      if (isTyping) {
+        setTypingUsers(prev => {
+          if (!prev.includes(typingUser.name)) {
+            return [...prev, typingUser.name];
+          }
+          return prev;
+        });
+      } else {
+        setTypingUsers(prev => prev.filter(name => name !== typingUser.name));
+      }
+    });
+    
+    // Cleanup on unmount
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
   }, []);
 
   useEffect(() => {
     if (currentRoom) {
       fetchMessages(currentRoom.id);
+      
+      // Join the room via Socket.IO
+      if (socketRef.current) {
+        socketRef.current.emit('join_room', { roomId: currentRoom.id, user });
+      }
     }
-  }, [currentRoom]);
+    
+    // Leave previous room when switching
+    return () => {
+      if (currentRoom && socketRef.current) {
+        socketRef.current.emit('leave_room', { roomId: currentRoom.id });
+      }
+    };
+  }, [currentRoom, user]);
 
   const fetchRooms = async () => {
     try {
@@ -103,34 +162,32 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
   };
 
   const handleJoinRoom = (room: Room) => {
+    // Clear previous room state
+    setMessages([]);
+    setOnlineUsers([]);
+    setTypingUsers([]);
     setCurrentRoom(room);
   };
 
-  const handleSendMessage = async (content: string) => {
-    if (!currentRoom) return;
+  const handleSendMessage = (content: string) => {
+    if (!currentRoom || !socketRef.current) return;
 
-    try {
-      const response = await fetch(`http://localhost:5000/api/rooms/${currentRoom.id}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ content })
-      });
-
-      if (response.ok) {
-        const newMessage = await response.json();
-        setMessages(prev => [...prev, newMessage]);
-      }
-    } catch (error) {
-      console.error('Failed to send message:', error);
-    }
+    // Send message via Socket.IO for real-time delivery
+    socketRef.current.emit('send_message', {
+      roomId: currentRoom.id,
+      content,
+      user
+    });
   };
 
   const handleTyping = (isTyping: boolean) => {
-    // Implement typing indicator logic here
-    console.log('User typing:', isTyping);
+    if (!currentRoom || !socketRef.current) return;
+    
+    socketRef.current.emit('typing', {
+      roomId: currentRoom.id,
+      user,
+      isTyping
+    });
   };
 
   if (loading) {
@@ -152,6 +209,7 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
           room={currentRoom}
           messages={messages}
           onlineUsers={onlineUsers}
+          typingUsers={typingUsers}
           onSendMessage={handleSendMessage}
           onTyping={handleTyping}
           currentUser={user}

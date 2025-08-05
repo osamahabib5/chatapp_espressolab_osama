@@ -28,6 +28,7 @@ interface ChatRoomProps {
   room: Room;
   messages: Message[];
   onlineUsers: User[];
+  typingUsers: string[];
   onSendMessage: (content: string) => void;
   onTyping: (isTyping: boolean) => void;
   currentUser: User;
@@ -38,6 +39,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({
   room,
   messages,
   onlineUsers,
+  typingUsers,
   onSendMessage,
   onTyping,
   currentUser,
@@ -45,7 +47,6 @@ const ChatRoom: React.FC<ChatRoomProps> = ({
 }) => {
   const [messageInput, setMessageInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
