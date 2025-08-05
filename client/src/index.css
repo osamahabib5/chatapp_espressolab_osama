@@ -145,6 +145,10 @@ body {
   cursor: pointer;
   transition: all 0.2s ease;
   border: 2px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .room-item:hover {

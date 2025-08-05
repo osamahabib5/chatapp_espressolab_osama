@@ -82,6 +82,28 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
       }
     });
     
+    // Listen for new room creation
+    socketRef.current.on('room_created', (newRoom: Room) => {
+      setRooms(prev => [newRoom, ...prev]);
+    });
+    
+    // Listen for room deletion
+    socketRef.current.on('room_deleted', ({ roomId }: { roomId: string }) => {
+      setRooms(prev => prev.filter(room => room.id !== roomId));
+      // If the current room is deleted, immediately clear everything
+      setCurrentRoom(prevRoom => {
+        if (prevRoom && prevRoom.id === roomId) {
+          // Clear all related state immediately
+          setMessages([]);
+          setOnlineUsers([]);
+          setTypingUsers([]);
+          console.log('The room you were in has been deleted');
+          return null;
+        }
+        return prevRoom;
+      });
+    });
+    
     // Cleanup on unmount
     return () => {
       if (socketRef.current) {
@@ -157,8 +179,31 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
     }
     
     const newRoom = await response.json();
-    setRooms(prev => [...prev, newRoom]);
+    // Don't manually update the rooms list here - it will be updated via socket event
     return newRoom;
+  };
+
+  const handleDeleteRoom = async (roomId: string): Promise<void> => {
+    // If we're deleting the current room, clear it immediately
+    if (currentRoom && currentRoom.id === roomId) {
+      setCurrentRoom(null);
+      setMessages([]);
+      setOnlineUsers([]);
+      setTypingUsers([]);
+    }
+    
+    const response = await fetch(`http://localhost:5000/api/rooms/${roomId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to delete room');
+    }
+    
+    // Don't manually update the rooms list here - it will be updated via socket event
   };
 
   const handleJoinRoom = (room: Room) => {
@@ -203,6 +248,7 @@ const Chat: React.FC<ChatProps> = ({ user, onLogout }) => {
         currentRoom={currentRoom}
         onCreateRoom={handleCreateRoom}
         onJoinRoom={handleJoinRoom}
+        onDeleteRoom={handleDeleteRoom}
       />
       {currentRoom ? (
         <ChatRoom 

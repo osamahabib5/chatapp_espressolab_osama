@@ -306,9 +306,50 @@ app.post('/api/rooms', authenticateToken, (req, res) => {
       chatRooms.set(roomId, newRoom);
       roomMessages.set(roomId, []);
       
+      // Broadcast new room to all connected clients
+      io.emit('room_created', newRoom);
+      
       res.json(newRoom);
     }
   );
+});
+
+// Delete room endpoint
+app.delete('/api/rooms/:roomId', authenticateToken, (req, res) => {
+  const { roomId } = req.params;
+
+  // First check if room exists and if user is authorized to delete it
+  db.get('SELECT * FROM rooms WHERE id = ?', [roomId], (err, room) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    
+    // Only allow room creator or any user to delete (you can modify this logic)
+    // if (room.createdBy !== req.user.userId) {
+    //   return res.status(403).json({ error: 'Not authorized to delete this room' });
+    // }
+
+    // First delete all messages in the room
+    db.run('DELETE FROM messages WHERE roomId = ?', [roomId], (err) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      
+      // Then delete the room
+      db.run('DELETE FROM rooms WHERE id = ?', [roomId], function(err) {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        
+        // Remove from in-memory storage
+        chatRooms.delete(roomId);
+        roomMessages.delete(roomId);
+        
+        // Notify all connected users that room has been deleted
+        io.emit('room_deleted', { roomId });
+        
+        // Make all sockets leave the room
+        io.in(roomId).socketsLeave(roomId);
+        
+        res.json({ message: 'Room deleted successfully' });
+      });
+    });
+  });
 });
 
 app.get('/api/rooms/:roomId/messages', authenticateToken, (req, res) => {

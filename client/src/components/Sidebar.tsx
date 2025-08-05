@@ -19,6 +19,7 @@ interface SidebarProps {
   currentRoom: Room | null;
   onCreateRoom: (name: string) => Promise<Room>;
   onJoinRoom: (room: Room) => void;
+  onDeleteRoom?: (roomId: string) => Promise<void>;
   onLogout: () => void;
   user: User;
 }
@@ -28,11 +29,13 @@ const Sidebar: React.FC<SidebarProps> = ({
   currentRoom,
   onCreateRoom,
   onJoinRoom,
+  onDeleteRoom,
   onLogout,
   user
 }) => {
   const [newRoomName, setNewRoomName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,6 +50,23 @@ const Sidebar: React.FC<SidebarProps> = ({
       console.error('Failed to create room:', error);
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleDeleteRoom = async (roomId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent room selection when clicking delete
+    if (!onDeleteRoom) return;
+    
+    if (window.confirm('Are you sure you want to delete this room? This action cannot be undone.')) {
+      setDeleting(roomId);
+      try {
+        await onDeleteRoom(roomId);
+      } catch (error) {
+        console.error('Failed to delete room:', error);
+        alert('Failed to delete room. Please try again.');
+      } finally {
+        setDeleting(null);
+      }
     }
   };
 
@@ -95,10 +115,35 @@ const Sidebar: React.FC<SidebarProps> = ({
             className={`room-item ${currentRoom?.id === room.id ? 'active' : ''}`}
             onClick={() => onJoinRoom(room)}
           >
-            <div style={{ fontWeight: 600 }}>{room.name}</div>
-            <div style={{ fontSize: '12px', opacity: 0.7 }}>
-              Created {formatDate(room.createdAt)}
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600 }}>{room.name}</div>
+              <div style={{ fontSize: '12px', opacity: 0.7 }}>
+                Created {formatDate(room.createdAt)}
+              </div>
             </div>
+            {onDeleteRoom && (
+              <button
+                className="delete-room-btn"
+                onClick={(e) => handleDeleteRoom(room.id, e)}
+                disabled={deleting === room.id}
+                title="Delete room"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#ff4757',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  opacity: deleting === room.id ? 0.5 : 0.7,
+                  transition: 'opacity 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                onMouseLeave={(e) => e.currentTarget.style.opacity = deleting === room.id ? '0.5' : '0.7'}
+              >
+                {deleting === room.id ? '⏳' : '🗑️'}
+              </button>
+            )}
           </div>
         ))}
       </div>
