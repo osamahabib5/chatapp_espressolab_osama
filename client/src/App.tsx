@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 import Login from './components/Login';
 import Register from './components/Register';
 import Chat from './components/Chat';
+import OAuthCallback from './components/OAuthCallback';
 import './App.css';
 
 interface User {
@@ -64,15 +67,47 @@ function App() {
   }
 
   return (
-    <div className="App">
-      {user ? (
-        <Chat user={user} onLogout={handleLogout} />
-      ) : showRegister ? (
-        <Register onRegister={handleRegister} onBackToLogin={() => setShowRegister(false)} />
-      ) : (
-        <Login onLogin={handleLogin} onShowRegister={() => setShowRegister(true)} />
-      )}
-    </div>
+    <GoogleOAuthProvider clientId={process.env.REACT_APP_GOOGLE_CLIENT_ID || "1819503316-g8utd2pglfkkj9knodugltkkj4vra4e8.apps.googleusercontent.com"}>
+      <Router>
+        <div className="App">
+          <Routes>
+            <Route 
+              path="/" 
+              element={
+                user ? <Navigate to="/chat" /> : <Navigate to="/login" />
+              } 
+            />
+            <Route 
+              path="/login" 
+              element={
+                user ? <Navigate to="/chat" /> : 
+                <Login onLogin={handleLogin} onShowRegister={() => setShowRegister(true)} />
+              } 
+            />
+            <Route 
+              path="/register" 
+              element={
+                user ? <Navigate to="/chat" /> : 
+                <Register onRegister={handleRegister} onBackToLogin={() => setShowRegister(false)} />
+              } 
+            />
+            <Route 
+              path="/oauth-callback" 
+              element={
+                user ? <Navigate to="/chat" /> : 
+                <OAuthCallback onLogin={handleLogin} />
+              } 
+            />
+            <Route 
+              path="/chat" 
+              element={
+                user ? <Chat user={user} onLogout={handleLogout} /> : <Navigate to="/login" />
+              } 
+            />
+          </Routes>
+        </div>
+      </Router>
+    </GoogleOAuthProvider>
   );
 }
 

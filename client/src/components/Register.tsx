@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { GoogleLogin } from '@react-oauth/google';
 
 interface User {
   id: string;
@@ -12,7 +14,17 @@ interface RegisterProps {
   onBackToLogin: () => void;
 }
 
+const handleGoogleSuccess = (credentialResponse: any) => {
+  // This will be handled by the OAuth callback route
+  window.location.href = 'http://localhost:5000/api/auth/google';
+};
+
+const handleGoogleError = () => {
+  console.log('Google Login Failed');
+};
+
 const Register: React.FC<RegisterProps> = ({ onRegister, onBackToLogin }) => {
+  const navigate = useNavigate();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -126,8 +138,34 @@ const Register: React.FC<RegisterProps> = ({ onRegister, onBackToLogin }) => {
           </button>
         </form>
         
+        <div className="auth-divider">
+          <span>or</span>
+        </div>
+        
+        <div className="oauth-buttons">
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={handleGoogleError}
+            useOneTap
+            theme="filled_blue"
+            size="large"
+            text="signup_with"
+            shape="rectangular"
+          />
+          
+          <button 
+            onClick={() => window.location.href = 'http://localhost:5000/api/auth/microsoft'}
+            className="oauth-button microsoft-button"
+          >
+            <svg width="20" height="20" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg">
+              <path d="M10 1H1v9h9V1zM20 1h-9v9h9V1zM10 11H1v9h9v-9zM20 11h-9v9h9v-9z" fill="currentColor"/>
+            </svg>
+            Sign up with Microsoft
+          </button>
+        </div>
+        
         <div className="auth-footer">
-          <p>Already have an account? <a href="#" onClick={onBackToLogin}>Sign in</a></p>
+          <p>Already have an account? <a href="#" onClick={() => navigate('/login')}>Sign in</a></p>
         </div>
       </div>
     </div>

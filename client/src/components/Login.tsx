@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { GoogleLogin } from '@react-oauth/google';
 
 interface User {
   id: string;
@@ -12,7 +14,17 @@ interface LoginProps {
   onShowRegister: () => void;
 }
 
+const handleGoogleSuccess = (credentialResponse: any) => {
+  // This will be handled by the OAuth callback route
+  window.location.href = 'http://localhost:5000/api/auth/google';
+};
+
+const handleGoogleError = () => {
+  console.log('Google Login Failed');
+};
+
 const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -84,8 +96,34 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
           </button>
         </form>
         
+        <div className="auth-divider">
+          <span>or</span>
+        </div>
+        
+        <div className="oauth-buttons">
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={handleGoogleError}
+            useOneTap
+            theme="filled_blue"
+            size="large"
+            text="signin_with"
+            shape="rectangular"
+          />
+          
+          {/* <button 
+            onClick={() => window.location.href = 'http://localhost:5000/api/auth/microsoft'}
+            className="oauth-button microsoft-button"
+          >
+            <svg width="20" height="20" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg">
+              <path d="M10 1H1v9h9V1zM20 1h-9v9h9V1zM10 11H1v9h9v-9zM20 11h-9v9h9v-9z" fill="currentColor"/>
+            </svg>
+            Sign in with Microsoft
+          </button> */}
+        </div>
+        
         <div className="auth-footer">
-          <p>Don't have an account? <a href="#" onClick={onShowRegister}>Sign up</a></p>
+          <p>Don't have an account? <a href="#" onClick={() => navigate('/register')}>Sign up</a></p>
         </div>
       </div>
     </div>

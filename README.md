@@ -7,6 +7,7 @@ A modern real-time chat application built with ReactJS, Node.js, and Socket.IO t
 ### ✅ Core Features
 - **Real-Time Communication**: Bidirectional messaging using Socket.IO
 - **Authentication**: Email/password authentication with JWT tokens
+- **OAuth Integration**: Sign in with Google or Microsoft accounts
 - **Multiple Chat Rooms**: Create and join different chat rooms dynamically
 - **Online Users**: See who's currently online in each room
 - **Message History**: Persistent message storage in SQLite database
@@ -28,6 +29,8 @@ A modern real-time chat application built with ReactJS, Node.js, and Socket.IO t
 - **Socket.IO Client** for real-time communication
 - **Axios** for HTTP requests
 - **CSS3** with modern styling and animations
+- **React Router** for navigation
+- **Google OAuth React** for Google sign-in integration
 
 ### Backend
 - **Node.js** with Express
@@ -35,6 +38,8 @@ A modern real-time chat application built with ReactJS, Node.js, and Socket.IO t
 - **SQLite3** for database storage
 - **JWT** for authentication
 - **bcryptjs** for password hashing
+- **Passport.js** for OAuth authentication
+- **Google OAuth 2.0** and **Microsoft OAuth** integration
 
 ### Testing
 - **Jest** for unit testing
@@ -60,7 +65,23 @@ A modern real-time chat application built with ReactJS, Node.js, and Socket.IO t
    npm run install:all
    ```
 
-3. **Start the development servers**
+3. **Configure Environment Variables**
+   
+   **Server Environment Variables:**
+   ```bash
+   cd server
+   cp env.example .env
+   ```
+   
+   **Client Environment Variables:**
+   ```bash
+   cd client
+   cp env.example .env
+   ```
+   
+   Edit both `.env` files with your actual OAuth credentials. Follow the instructions in `OAUTH_SETUP.md` to set up Google and Microsoft OAuth authentication.
+
+4. **Start the development servers**
    ```bash
    npm run dev
    ```
@@ -168,6 +189,10 @@ client/
 ### Authentication
 - `POST /api/auth/register` - Register new user
 - `POST /api/auth/login` - Login user
+- `GET /api/auth/google` - Initiate Google OAuth
+- `GET /api/auth/google/callback` - Google OAuth callback
+- `GET /api/auth/microsoft` - Initiate Microsoft OAuth
+- `GET /api/auth/microsoft/callback` - Microsoft OAuth callback
 
 ### Rooms
 - `GET /api/rooms` - Get all rooms (requires auth)
@@ -216,11 +241,52 @@ npm start
 ```
 
 ### Environment Variables
-Create a `.env` file in the server directory:
+
+#### Server Environment Variables
+
+Copy the example environment file and configure your server credentials:
+
+```bash
+cd server
+cp env.example .env
 ```
+
+Edit the server `.env` file with your actual values:
+
+```env
+# Server Configuration
 PORT=5000
 JWT_SECRET=your-secret-key-here
+
+# Google OAuth Configuration
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+# Microsoft OAuth Configuration
+MICROSOFT_CLIENT_ID=your-microsoft-client-id
+MICROSOFT_CLIENT_SECRET=your-microsoft-client-secret
 ```
+
+#### Client Environment Variables
+
+Copy the example environment file and configure your client credentials:
+
+```bash
+cd client
+cp env.example .env
+```
+
+Edit the client `.env` file with your actual values:
+
+```env
+# React App Environment Variables
+# Note: All environment variables must start with REACT_APP_
+
+# Google OAuth Client ID for React
+REACT_APP_GOOGLE_CLIENT_ID=your-google-client-id
+```
+
+**Important**: Never commit your `.env` files to version control. The `.gitignore` file is configured to exclude them.
 
 ## 📈 Scalability Considerations
 
