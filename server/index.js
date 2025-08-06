@@ -12,6 +12,8 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const MicrosoftStrategy = require('passport-microsoft').Strategy;
 const session = require('express-session');
+const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
@@ -101,7 +103,125 @@ db.serialize(() => {
     FOREIGN KEY (roomId) REFERENCES rooms (id),
     FOREIGN KEY (userId) REFERENCES users (id)
   )`);
+
+  // Create password reset tokens table
+  db.run(`CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id TEXT PRIMARY KEY,
+    userId TEXT,
+    token TEXT,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expiresAt DATETIME,
+    used BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (userId) REFERENCES users (id)
+  )`);
 });
+
+// Email configuration
+const createEmailTransporter = () => {
+  // Check if we have email credentials configured
+  const emailUser = process.env.EMAIL_USER;
+  const emailPass = process.env.EMAIL_PASS;
+  const emailService = process.env.EMAIL_SERVICE || 'gmail';
+  
+  if (!emailUser || !emailPass) {
+    console.log('⚠️  Email credentials not configured. Emails will be logged to console only.');
+    return null;
+  }
+
+  console.log(`📧 Email service configured: ${emailService}`);
+  
+  // Configuration for different email services
+  const serviceConfigs = {
+    gmail: {
+      service: 'gmail',
+      auth: { user: emailUser, pass: emailPass }
+    },
+    outlook: {
+      service: 'outlook',
+      auth: { user: emailUser, pass: emailPass }
+    },
+    yahoo: {
+      service: 'yahoo',
+      auth: { user: emailUser, pass: emailPass }
+    },
+    sendgrid: {
+      host: 'smtp.sendgrid.net',
+      port: 587,
+      secure: false,
+      auth: {
+        user: 'apikey',
+        pass: emailPass // SendGrid API key
+      }
+    },
+    smtp: {
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: parseInt(process.env.SMTP_PORT) || 587,
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: { user: emailUser, pass: emailPass }
+    }
+  };
+
+  const config = serviceConfigs[emailService.toLowerCase()] || serviceConfigs.gmail;
+  
+  try {
+    return nodemailer.createTransport(config);
+  } catch (error) {
+    console.error('❌ Failed to create email transporter:', error.message);
+    return null;
+  }
+};
+
+const sendEmail = async (to, subject, html) => {
+  try {
+    const transporter = createEmailTransporter();
+    
+    if (!transporter) {
+      // Development mode - log to console
+      console.log('\n=== 📧 EMAIL (DEVELOPMENT MODE) ===');
+      console.log('To:', to);
+      console.log('Subject:', subject);
+      console.log('\n--- EMAIL CONTENT ---');
+      console.log(html.replace(/<[^>]*>/g, '').substring(0, 200) + '...');
+      console.log('\n--- SETUP INSTRUCTIONS ---');
+      console.log('To send real emails, configure these environment variables in server/.env:');
+      console.log('EMAIL_SERVICE=gmail  # or outlook, yahoo, sendgrid, smtp');
+      console.log('EMAIL_USER=your-email@gmail.com');
+      console.log('EMAIL_PASS=your-app-password');
+      console.log('\nFor Gmail: Use an App Password, not your regular password');
+      console.log('Generate one at: https://myaccount.google.com/apppasswords');
+      console.log('================================\n');
+      
+      return true; // Return success for development
+    }
+    
+    // Production mode - send actual email
+    console.log(`📧 Sending email to: ${to}`);
+    
+    const mailOptions = {
+      from: `"ChatApp" <${process.env.EMAIL_USER}>`,
+      to,
+      subject,
+      html
+    };
+    
+    const result = await transporter.sendMail(mailOptions);
+    console.log('✅ Email sent successfully:', result.messageId);
+    
+    return true;
+  } catch (error) {
+    console.error('❌ Email sending error:', error.message);
+    
+    // Log specific error types for better debugging
+    if (error.code === 'EAUTH') {
+      console.error('Authentication failed. Check your email credentials.');
+      console.error('For Gmail, make sure you\'re using an App Password, not your regular password.');
+    } else if (error.code === 'ECONNECTION') {
+      console.error('Connection failed. Check your internet connection and SMTP settings.');
+    }
+    
+    return false;
+  }
+};
 
 // In-memory storage for active users and rooms
 const activeUsers = new Map();
@@ -279,6 +399,178 @@ app.post('/api/auth/login', (req, res) => {
     const token = jwt.sign({ userId: user.id, email: user.email, name: user.name }, JWT_SECRET, { expiresIn: '24h' });
     res.json({ token, user: { id: user.id, email: user.email, name: user.name, photoUrl: user.photoUrl } });
   });
+});
+
+// Forgot Password endpoint
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    // Check if user exists
+    db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
+      if (err) {
+        return res.status(500).json({ error: 'Database error' });
+      }
+
+      // Always return success to prevent email enumeration attacks
+      if (!user) {
+        return res.json({ message: 'If an account with that email exists, a password reset link has been sent.' });
+      }
+
+      // Generate reset token
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const tokenId = uuidv4();
+      const expiresAt = new Date(Date.now() + 3600000); // 1 hour from now
+
+      // Store reset token in database
+      db.run(
+        'INSERT INTO password_reset_tokens (id, userId, token, expiresAt) VALUES (?, ?, ?, ?)',
+        [tokenId, user.id, resetToken, expiresAt.toISOString()],
+        async function(err) {
+          if (err) {
+            console.error('Database error:', err);
+            return res.status(500).json({ error: 'Database error' });
+          }
+
+          // Create reset URL
+          const resetUrl = `http://localhost:3000/reset-password?token=${resetToken}`;
+
+          // Email template
+          const emailHtml = `
+            <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
+              <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
+                <h1 style="color: white; margin: 0;">ChatApp</h1>
+                <p style="color: white; margin: 10px 0 0 0;">Password Reset Request</p>
+              </div>
+              <div style="padding: 30px; background: #f8f9fa;">
+                <h2 style="color: #333; margin-bottom: 20px;">Reset Your Password</h2>
+                <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
+                  Hi ${user.name},<br><br>
+                  We received a request to reset your password. Click the button below to create a new password:
+                </p>
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${resetUrl}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">Reset Password</a>
+                </div>
+                <p style="color: #666; font-size: 14px; line-height: 1.6;">
+                  This link will expire in 1 hour. If you didn't request this password reset, please ignore this email.
+                </p>
+                <p style="color: #666; font-size: 14px; line-height: 1.6;">
+                  If the button doesn't work, copy and paste this link into your browser:<br>
+                  <a href="${resetUrl}" style="color: #667eea; word-break: break-all;">${resetUrl}</a>
+                </p>
+              </div>
+              <div style="padding: 20px; text-align: center; background: #e9ecef; color: #666; font-size: 12px;">
+                <p>© 2024 ChatApp. All rights reserved.</p>
+              </div>
+            </div>
+          `;
+
+          // Send email
+          const emailSent = await sendEmail(
+            email,
+            'Reset Your ChatApp Password',
+            emailHtml
+          );
+
+          if (!emailSent) {
+            return res.status(500).json({ error: 'Failed to send reset email' });
+          }
+
+          res.json({ message: 'If an account with that email exists, a password reset link has been sent.' });
+        }
+      );
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Reset Password endpoint
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    
+    if (!token || !password) {
+      return res.status(400).json({ error: 'Token and password are required' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+    }
+
+    // Find valid reset token
+    db.get(
+      'SELECT * FROM password_reset_tokens WHERE token = ? AND used = FALSE AND datetime(expiresAt) > datetime("now")',
+      [token],
+      async (err, resetToken) => {
+        if (err) {
+          return res.status(500).json({ error: 'Database error' });
+        }
+
+        if (!resetToken) {
+          return res.status(400).json({ error: 'Invalid or expired reset token' });
+        }
+
+        // Hash new password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Update user password
+        db.run(
+          'UPDATE users SET password = ? WHERE id = ?',
+          [hashedPassword, resetToken.userId],
+          function(err) {
+            if (err) {
+              return res.status(500).json({ error: 'Database error' });
+            }
+
+            // Mark token as used
+            db.run(
+              'UPDATE password_reset_tokens SET used = TRUE WHERE id = ?',
+              [resetToken.id],
+              function(err) {
+                if (err) {
+                  console.error('Error marking token as used:', err);
+                }
+
+                // Get updated user info
+                db.get('SELECT id, email, name, photoUrl FROM users WHERE id = ?', [resetToken.userId], (err, user) => {
+                  if (err || !user) {
+                    return res.status(500).json({ error: 'Database error' });
+                  }
+
+                  // Generate new JWT token for automatic login
+                  const jwtToken = jwt.sign(
+                    { userId: user.id, email: user.email, name: user.name },
+                    JWT_SECRET,
+                    { expiresIn: '24h' }
+                  );
+
+                  res.json({
+                    message: 'Password reset successful',
+                    token: jwtToken,
+                    user: {
+                      id: user.id,
+                      email: user.email,
+                      name: user.name,
+                      photoUrl: user.photoUrl
+                    }
+                  });
+                });
+              }
+            );
+          }
+        );
+      }
+    );
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 app.get('/api/rooms', authenticateToken, (req, res) => {

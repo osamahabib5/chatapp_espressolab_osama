@@ -153,7 +153,7 @@ const Register: React.FC<RegisterProps> = ({ onRegister, onBackToLogin }) => {
             shape="rectangular"
           />
           
-          <button 
+          {/* <button 
             onClick={() => window.location.href = 'http://localhost:5000/api/auth/microsoft'}
             className="oauth-button microsoft-button"
           >
@@ -161,7 +161,7 @@ const Register: React.FC<RegisterProps> = ({ onRegister, onBackToLogin }) => {
               <path d="M10 1H1v9h9V1zM20 1h-9v9h9V1zM10 11H1v9h9v-9zM20 11h-9v9h9v-9z" fill="currentColor"/>
             </svg>
             Sign up with Microsoft
-          </button>
+          </button> */}
         </div>
         
         <div className="auth-footer">

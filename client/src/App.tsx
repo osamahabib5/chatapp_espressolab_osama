@@ -5,6 +5,8 @@ import Login from './components/Login';
 import Register from './components/Register';
 import Chat from './components/Chat';
 import OAuthCallback from './components/OAuthCallback';
+import ForgotPassword from './components/ForgotPassword';
+import ResetPassword from './components/ResetPassword';
 import './App.css';
 
 interface User {
@@ -122,6 +124,20 @@ function App() {
               element={
                 user ? <Navigate to="/chat" /> : 
                 <Register onRegister={handleRegister} onBackToLogin={() => setShowRegister(false)} />
+              } 
+            />
+            <Route 
+              path="/forgot-password" 
+              element={
+                user ? <Navigate to="/chat" /> : 
+                <ForgotPassword />
+              } 
+            />
+            <Route 
+              path="/reset-password" 
+              element={
+                user ? <Navigate to="/chat" /> : 
+                <ResetPassword onLogin={handleLogin} />
               } 
             />
             <Route 

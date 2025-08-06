@@ -7,6 +7,7 @@ A modern real-time chat application built with ReactJS, Node.js, and Socket.IO t
 ### ✅ Core Features
 - **Real-Time Communication**: Bidirectional messaging using Socket.IO
 - **Authentication**: Email/password authentication with JWT tokens
+- **Password Reset**: Secure password reset via email with token-based verification
 - **OAuth Integration**: Sign in with Google or Microsoft accounts
 - **Multiple Chat Rooms**: Create and join different chat rooms dynamically
 - **Online Users**: See who's currently online in each room
@@ -184,11 +185,18 @@ client/
    - Users can join multiple rooms (one at a time)
    - Message history loaded when joining a room
 
+4. **Password Reset Flow**:
+   - User requests password reset → Secure token generated → Email sent with reset link
+   - User clicks reset link → Token validated → New password form displayed
+   - User submits new password → Token verified → Password updated → User automatically logged in
+
 ## 🔧 API Endpoints
 
 ### Authentication
 - `POST /api/auth/register` - Register new user
 - `POST /api/auth/login` - Login user
+- `POST /api/auth/forgot-password` - Request password reset email
+- `POST /api/auth/reset-password` - Reset password with token
 - `GET /api/auth/google` - Initiate Google OAuth
 - `GET /api/auth/google/callback` - Google OAuth callback
 - `GET /api/auth/microsoft` - Initiate Microsoft OAuth
@@ -226,6 +234,117 @@ client/
 - **Input Validation**: Server-side validation for all inputs
 - **CORS Configuration**: Proper CORS setup for security
 - **SQL Injection Prevention**: Parameterized queries
+- **Password Reset Security**: Token-based password reset with expiration and one-time use
+
+## 🔑 Password Reset Implementation
+
+The application includes a comprehensive password reset system with multiple security layers:
+
+### Frontend Components
+- **ForgotPassword.tsx**: Email input form for requesting password reset
+- **ResetPassword.tsx**: New password form with token validation
+- **Forgot Password Link**: Available on the login screen for easy access
+
+### Backend Implementation
+
+#### Database Schema
+```sql
+password_reset_tokens (
+  id TEXT PRIMARY KEY,
+  userId TEXT,
+  token TEXT,
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+  expiresAt DATETIME,
+  used BOOLEAN DEFAULT FALSE,
+  FOREIGN KEY (userId) REFERENCES users (id)
+)
+```
+
+#### API Endpoints
+
+**1. Request Password Reset**
+```
+POST /api/auth/forgot-password
+Body: { "email": "user@example.com" }
+```
+- Validates email format
+- Generates secure random token using `crypto.randomBytes(32)`
+- Sets 1-hour expiration time
+- Stores token in database with user association
+- Sends branded HTML email with reset link
+- Returns success message regardless of email existence (prevents enumeration)
+
+**2. Reset Password**
+```
+POST /api/auth/reset-password
+Body: { "token": "secure-token", "password": "newpassword123" }
+```
+- Validates token exists and hasn't expired
+- Ensures token hasn't been used before
+- Validates password meets minimum requirements (6+ characters)
+- Updates user password with bcrypt hashing
+- Marks token as used to prevent reuse
+- Automatically logs user in with new JWT token
+
+### Security Features
+
+#### Token Security
+- **Cryptographically Secure**: Uses `crypto.randomBytes()` for unpredictable tokens
+- **Time-Limited**: Tokens expire after 1 hour
+- **One-Time Use**: Tokens are marked as used after successful reset
+- **Database Cleanup**: Expired tokens remain in database for audit purposes
+
+#### Email Security
+- **No Email Enumeration**: Always returns success to prevent account discovery
+- **Professional Templates**: Branded HTML emails with clear instructions
+- **Link Validation**: Reset links include token validation on the frontend
+
+#### Additional Protections
+- **Password Validation**: Minimum 6-character requirement with frontend/backend validation
+- **Automatic Login**: Seamless user experience after successful password reset
+- **Error Handling**: Comprehensive error messages for invalid/expired tokens
+
+### Email Configuration
+
+For development, emails are logged to the console. For production:
+
+```javascript
+// Configure email service in server/index.js
+const transporter = nodemailer.createTransporter({
+  service: 'gmail', // or your preferred service
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
+```
+
+Add to your server `.env` file:
+```env
+EMAIL_USER=your-email@gmail.com
+EMAIL_PASS=your-app-password
+```
+
+### User Experience Flow
+
+1. **Forgot Password Request**:
+   - User clicks "Forgot your password?" on login screen
+   - Enters email address in dedicated form
+   - Receives confirmation message
+   - Gets email with branded reset link
+
+2. **Password Reset**:
+   - User clicks reset link from email
+   - Token validation occurs automatically
+   - New password form displayed with confirmation field
+   - Password requirements clearly communicated
+   - Automatic login after successful reset
+
+3. **Error Handling**:
+   - Invalid/expired tokens show clear error messages
+   - Links to request new reset token if needed
+   - Password mismatch validation
+   - Network error handling with retry options
 
 ## 🚀 Deployment
 

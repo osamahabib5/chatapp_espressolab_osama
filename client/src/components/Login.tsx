@@ -124,6 +124,11 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
         
         <div className="auth-footer">
           <p>Don't have an account? <a href="#" onClick={() => navigate('/register')}>Sign up</a></p>
+          <p>
+            <a href="#" onClick={() => navigate('/forgot-password')} className="auth-link">
+              Forgot your password?
+            </a>
+          </p>
         </div>
       </div>
     </div>
